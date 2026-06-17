@@ -14,13 +14,13 @@ extracted for standalone reuse.
 
 | Name | Description | Required | Default |
 | ---- | ----------- | -------- | ------- |
-| `repo-path` | Path to the checked-out repository | True |  |
-| `base-ref` | Git reference or commit hash representing the diff base | False |  |
-| `head-ref` | Git reference or commit hash representing the diff head | False |  |
-| `file-type` | File type key or list of keys (comma or newline separated) | False |  |
-| `include-globs` | Optional glob filters (comma or newline separated) | False |  |
-| `exclude-globs` | Optional glob filters to exclude (comma or newline separated) | False |  |
-| `type-pattern-add` | Additional type-to-glob mappings (comma or newline separated, e.g. cpp:*.cc). '.in' variants are added automatically. | False |  |
+| `repo-path` | Path to the checked-out repository | True | |
+| `base-ref` | Git reference or commit hash representing the diff base | False | |
+| `head-ref` | Git reference or commit hash representing the diff head | False | |
+| `file-type` | File type key or list of keys (comma or newline separated) | False | |
+| `include-globs` | Optional glob filters (comma or newline separated) | False | |
+| `exclude-globs` | Optional glob filters to exclude (comma or newline separated) | False | |
+| `type-pattern-add` | Additional type-to-glob mappings (comma or newline separated, e.g. cpp:*.cc). '.in' variants are added automatically. | False | |
 
 **Outputs:**
 

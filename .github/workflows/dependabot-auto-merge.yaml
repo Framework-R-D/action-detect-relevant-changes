@@ -13,10 +13,10 @@ name: Dependabot auto-merge
     types: [completed]
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   repository-projects: write # Required if the token needs to modify repository settings via API
-  workflows: write
 
 jobs:
   dependabot:

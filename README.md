@@ -29,6 +29,8 @@
 | `matched` | true if matching files were found |
 | `matched_files` | Newline-delimited list of matching files |
 
+Changed paths containing carriage returns or line feeds conservatively set `matched` to `true` and leave `matched_files` empty because those paths cannot be represented unambiguously by this newline-delimited output.
+
 ## License
 
 [Apache 2.0](LICENSE)

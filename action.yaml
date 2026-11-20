@@ -189,34 +189,33 @@ runs:
           ALL_PATTERNS=()
         fi
 
-        # Use git ls-tree instead of find so this works even when the working
-        # tree contains no files (e.g. after a sparse checkout with no patterns).
-        {
-          if [ "${#ALL_PATTERNS[@]}" -gt 0 ]; then
-            git ls-tree -r --name-only -z "$HEAD_COMMIT" | while IFS= read -r -d '' file; do
-              basename="${file##*/}"
-              for pattern in "${ALL_PATTERNS[@]}"; do
-                # Type patterns are intentionally interpreted as shell globs.
-                # shellcheck disable=SC2053
-                if [[ "$basename" == $pattern ]]; then
-                  printf '%s\n' "$file"
-                  break
-                fi
-              done
-            done
-          else
-            git ls-tree -r --name-only -z "$HEAD_COMMIT" | while IFS= read -r -d '' file; do
-              printf '%s\n' "$file"
-            done
+        # Keep tree paths NUL-delimited until they are matched to validated changed paths.
+        declare -A CHANGED_PATHS=()
+        while IFS= read -r changed_file; do
+          CHANGED_PATHS["$changed_file"]=1
+        done < "$tmp_dir/changed-files.txt"
+        git ls-tree -r --name-only -z "$HEAD_COMMIT" > "$tmp_dir/tree-paths.bin"
+        : > "$tmp_dir/initial-matched.txt"
+        while IFS= read -r -d '' file; do
+          if [ -z "${CHANGED_PATHS["$file"]+present}" ]; then
+            continue
           fi
-        } | LC_ALL=C sort > "$tmp_dir/find-matches.txt"
-        LC_ALL=C sort "$tmp_dir/changed-files.txt" > "$tmp_dir/changed-files-sorted.txt"
-
-        if [ -s "$tmp_dir/find-matches.txt" ]; then
-          comm -12 "$tmp_dir/changed-files-sorted.txt" "$tmp_dir/find-matches.txt" > "$tmp_dir/initial-matched.txt" || true
-        else
-          cp "$tmp_dir/changed-files-sorted.txt" "$tmp_dir/initial-matched.txt"
-        fi
+          if [ "${#ALL_PATTERNS[@]}" -gt 0 ]; then
+            basename="${file##*/}"
+            matched_type=false
+            for pattern in "${ALL_PATTERNS[@]}"; do
+              # Type patterns are intentionally interpreted as shell globs.
+              # shellcheck disable=SC2053
+              if [[ "$basename" == $pattern ]]; then
+                matched_type=true
+                break
+              fi
+            done
+            [ "$matched_type" = true ] || continue
+          fi
+          printf '%s\n' "$file" >> "$tmp_dir/initial-matched.txt"
+        done < "$tmp_dir/tree-paths.bin"
+        LC_ALL=C sort -o "$tmp_dir/initial-matched.txt" "$tmp_dir/initial-matched.txt"
 
         filter_by_include() {
           local file="$1"
@@ -251,9 +250,9 @@ runs:
 
         if [ -s "$tmp_dir/matched-files.txt" ]; then
           echo "matched=true" >> "$GITHUB_OUTPUT"
-          delimiter="EOF_$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+          delimiter="EOF_$(python3 -I -c 'import secrets; print(secrets.token_hex(16))')"
           while grep -Fqx -- "$delimiter" "$tmp_dir/matched-files.txt"; do
-            delimiter="EOF_$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+            delimiter="EOF_$(python3 -I -c 'import secrets; print(secrets.token_hex(16))')"
           done
           {
             printf 'matched_files<<%s\n' "$delimiter"

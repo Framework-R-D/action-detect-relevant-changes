@@ -47,7 +47,9 @@ def git(repository: Path, *arguments: str) -> str:
 class DetectRelevantChangesTests(unittest.TestCase):
     """Verify normal paths and line-break output injection defenses."""
 
-    def make_repository(self, changed_path: str) -> tuple[Path, str, str, Path, Path]:
+    def make_repository(
+        self, changed_path: str, base_files: dict[str, str] | None = None
+    ) -> tuple[Path, str, str, Path, Path]:
         """Create a two-commit repository and isolated runner output paths."""
         temp_dir = tempfile.TemporaryDirectory(prefix="detect-changes-test-")
         self.addCleanup(temp_dir.cleanup)
@@ -60,7 +62,11 @@ class DetectRelevantChangesTests(unittest.TestCase):
         git(repository, "config", "commit.gpgsign", "false")
         (repository / "README.md").write_text("base\n", encoding="utf-8")
         (repository / "existing.cpp").write_text("base\n", encoding="utf-8")
-        git(repository, "add", "README.md", "existing.cpp")
+        for filename, content in (base_files or {}).items():
+            path = repository / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        git(repository, "add", "--all")
         git(repository, "commit", "--quiet", "-m", "base")
         base_ref = git(repository, "rev-parse", "HEAD")
 
@@ -77,11 +83,15 @@ class DetectRelevantChangesTests(unittest.TestCase):
         return repository, base_ref, head_ref, runner_temp, output_path
 
     def run_action(
-        self, changed_path: str, file_type: str, base_ref_override: str | None = None
+        self,
+        changed_path: str,
+        file_type: str,
+        base_ref_override: str | None = None,
+        base_files: dict[str, str] | None = None,
     ) -> tuple[list[str], str]:
         """Execute the action with sentinel-only environment values."""
         repository, base_ref, head_ref, runner_temp, output_path = self.make_repository(
-            changed_path
+            changed_path, base_files
         )
         environment = {
             "PATH": os.environ["PATH"],
@@ -115,6 +125,26 @@ class DetectRelevantChangesTests(unittest.TestCase):
                 lines, _ = self.run_action(filename, "cpp")
                 self.assertEqual(lines[0], "matched=true")
                 self.assertIn(filename, lines)
+
+    def test_unchanged_newline_path_cannot_create_a_type_match(self) -> None:
+        """Tree-only newline paths cannot split into a changed path entry."""
+        lines, _ = self.run_action(
+            "victim.txt", "cpp", base_files={"victim.txt\nsuffix.cpp": "base\n"}
+        )
+
+        self.assertEqual(lines, ["matched=false", "matched_files="])
+
+    def test_delimiter_generation_ignores_repository_secrets_module(self) -> None:
+        """A repository-local secrets module cannot execute during delimiter creation."""
+        module = (
+            'print("repository secrets imported")\n'
+            "def token_hex(size):\n"
+            '    return "a" * (2 * size)\n'
+        )
+        lines, stdout = self.run_action("example.cpp", "cpp", base_files={"secrets.py": module})
+
+        self.assertEqual(lines[0], "matched=true")
+        self.assertNotIn("repository secrets imported", stdout)
 
     def test_static_eof_filename_does_not_end_multiline_output(self) -> None:
         lines, _ = self.run_action("EOF", "")
